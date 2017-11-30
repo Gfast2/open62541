@@ -54,7 +54,7 @@
 # endif
 #endif
 # ifndef __CYGWIN__
-#  include <netinet/tcp.h>
+// #  include <netinet/tcp.h>
 # endif
 #endif
 
