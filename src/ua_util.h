@@ -11,35 +11,29 @@
 extern "C" {
 #endif
 
-/* Assert */
-#include <assert.h>
-#define UA_assert(ignore) assert(ignore)
-
 /* BSD Queue Macros */
 #include "queue.h"
 
 /* Macro-Expand for MSVC workarounds */
 #define UA_MACRO_EXPAND(x) x
 
-/* container_of */
-#define container_of(ptr, type, member) \
-    (type *)((uintptr_t)ptr - offsetof(type,member))
-
-#ifdef UA_ENABLE_MULTITHREADING
-/* Thread Local Storage */
-# if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
-#  define UA_THREAD_LOCAL _Thread_local /* C11 */
-# elif defined(__GNUC__)
-#  define UA_THREAD_LOCAL __thread /* GNU extension */
-# elif defined(_MSC_VER)
-#  define UA_THREAD_LOCAL __declspec(thread) /* MSVC extension */
-# else
-#  define UA_THREAD_LOCAL
-#  warning The compiler does not allow thread-local variables. \
-  The library can be built, but will not be thread-safe.
-# endif
+/* Thread-Local Storage
+ * --------------------
+ * Thread-local variables are always enabled. Also when the library is built
+ * with ``UA_ENABLE_MULTITHREADING`` disabled. Otherwise, if multiple clients
+ * run in separate threads, race conditions may occur via global variables in
+ * the encoding layer. */
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+# define UA_THREAD_LOCAL _Thread_local /* C11 */
+#elif defined(__cplusplus) && __cplusplus > 199711L
+# define UA_THREAD_LOCAL thread_local /* C++11 */
+#elif defined(__GNUC__)
+# define UA_THREAD_LOCAL __thread /* GNU extension */
+#elif defined(_MSC_VER)
+# define UA_THREAD_LOCAL __declspec(thread) /* MSVC extension */
 #else
-#  define UA_THREAD_LOCAL
+# warning The compiler does not support thread-local variables
+# define UA_THREAD_LOCAL
 #endif
 
 /* Integer Shortnames
@@ -55,6 +49,7 @@ typedef UA_UInt32 u32;
 typedef UA_Int32 i32;
 typedef UA_UInt64 u64;
 typedef UA_Int64 i64;
+typedef UA_StatusCode status;
 
 /* Atomic Operations
  * -----------------
@@ -127,13 +122,6 @@ size_t UA_readNumber(u8 *buf, size_t buflen, u32 *number);
 
 #define MIN(A,B) (A > B ? B : A)
 #define MAX(A,B) (A > B ? A : B)
-
-/* The typename string can be disabled to safe memory */
-#ifdef UA_ENABLE_TYPENAMES
-# define UA_TYPENAME(name) name,
-#else
-# define UA_TYPENAME(name)
-#endif
 
 #ifdef UA_DEBUG_DUMP_PKGS
 void UA_EXPORT UA_dump_hex_pkg(UA_Byte* buffer, size_t bufferLen);

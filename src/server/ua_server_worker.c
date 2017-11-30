@@ -55,7 +55,6 @@ workerLoop(UA_Worker *worker) {
     /* Initialize the (thread local) random seed with the ram address
      * of the worker. Not for security-critical entropy! */
     UA_random_seed((uintptr_t)worker);
-    rcu_register_thread();
 
     while(*running) {
         UA_atomic_add(counter, 1);
@@ -76,15 +75,10 @@ workerLoop(UA_Worker *worker) {
             continue;
         }
         
-        UA_RCU_LOCK();
         dc->callback(server, dc->data);
         UA_free(dc);
-        UA_RCU_UNLOCK();
     }
 
-    UA_ASSERT_RCU_UNLOCKED();
-    rcu_barrier();
-    rcu_unregister_thread();
     UA_LOG_DEBUG(server->config.logger, UA_LOGCATEGORY_SERVER,
                  "Worker shut down");
     return NULL;
@@ -264,7 +258,8 @@ processDelayedCallback(UA_Server *server, WorkerCallback *dc) {
 /**
  * Main Server Loop
  * ----------------
- * Start: Spin up the workers and the network layer
+ * Start: Spin up the workers and the network layer and sample the server's
+ *        start time.
  * Iterate: Process repeated callbacks and events in the network layer.
  *          This part can be driven from an external main-loop in an
  *          event-driven single-threaded architecture.
@@ -273,11 +268,21 @@ processDelayedCallback(UA_Server *server, WorkerCallback *dc) {
 
 UA_StatusCode
 UA_Server_run_startup(UA_Server *server) {
-    /* Start the networklayers */
+    UA_Variant var;
     UA_StatusCode result = UA_STATUSCODE_GOOD;
+
+    /* Sample the start time and set it to the Server object */
+    server->startTime = UA_DateTime_now();
+    UA_Variant_init(&var);
+    UA_Variant_setScalar(&var, &server->startTime, &UA_TYPES[UA_TYPES_DATETIME]);
+    UA_Server_writeValue(server,
+                         UA_NODEID_NUMERIC(0, UA_NS0ID_SERVER_SERVERSTATUS_STARTTIME),
+                         var);
+
+    /* Start the networklayers */
     for(size_t i = 0; i < server->config.networkLayersSize; ++i) {
         UA_ServerNetworkLayer *nl = &server->config.networkLayers[i];
-        result |= nl->start(nl);
+        result |= nl->start(nl, &server->config.customHostname);
     }
 
     /* Spin up the worker threads */
@@ -321,8 +326,11 @@ UA_Server_run_iterate(UA_Server *server, UA_Boolean waitInternal) {
         nextRepeated = latest;
 
     UA_UInt16 timeout = 0;
+
+    /* round always to upper value to avoid timeout to be set to 0
+    * if (nextRepeated - now) < (UA_MSEC_TO_DATETIME/2) */
     if(waitInternal)
-        timeout = (UA_UInt16)((nextRepeated - now) / UA_MSEC_TO_DATETIME);
+        timeout = (UA_UInt16)(((nextRepeated - now) + (UA_MSEC_TO_DATETIME - 1)) / UA_MSEC_TO_DATETIME);
 
     /* Listen on the networklayer */
     for(size_t i = 0; i < server->config.networkLayersSize; ++i) {
@@ -389,9 +397,6 @@ UA_Server_run_shutdown(UA_Server *server) {
      * This also executes the delayed callbacks. */
     emptyDispatchQueue(server);
     
-    /* Wait for all scheduled call_rcu work to complete */
-    UA_ASSERT_RCU_UNLOCKED();
-    rcu_barrier();
 #endif
 
     /* Stop multicast discovery */

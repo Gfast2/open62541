@@ -2,6 +2,19 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+/* Enable POSIX features */
+#ifndef _XOPEN_SOURCE
+# define _XOPEN_SOURCE 600
+#endif
+#ifndef _DEFAULT_SOURCE
+# define _DEFAULT_SOURCE
+#endif
+/* On older systems we need to define _BSD_SOURCE.
+ * _DEFAULT_SOURCE is an alias for that. */
+#ifndef _BSD_SOURCE
+# define _BSD_SOURCE
+#endif
+
 #include "ua_server_internal.h"
 #include "ua_mdns_internal.h"
 #include "ua_util.h"
@@ -25,18 +38,18 @@
 #   include <netdb.h> // for recvfrom in cygwin
 #  endif
 
-#ifndef STRDUP
+#ifndef UA_STRDUP
 # if defined(__MINGW32__)
 static char *ua_strdup(const char *s) {
-    char *p = UA_malloc(strlen(s) + 1);
+    char *p = (char*)UA_malloc(strlen(s) + 1);
     if(p) { strcpy(p, s); }
     return p;
 }
-# define STRDUP ua_strdup
+# define UA_STRDUP ua_strdup
 # elif defined(_WIN32)
-# define STRDUP _strdup
+# define UA_STRDUP _strdup
 # else
-# define STRDUP strdup
+# define UA_STRDUP strdup
 # endif
 #endif
 
@@ -180,7 +193,7 @@ setTxt(const struct resource *r,
         if (!entry->srvSet) {
             /* txt arrived before SRV, thus cache path entry */
             // todo: malloc in strdup may fail: return a statuscode
-            entry->pathTmp = STRDUP(path);
+            entry->pathTmp = UA_STRDUP(path);
         } else {
             /* SRV already there and discovery URL set. Add path to discovery URL */
             mdns_append_path_to_url(&entry->serverOnNetwork.discoveryUrl, path);
@@ -229,8 +242,14 @@ setSrv(UA_Server *server, const struct resource *r,
 
     // todo: malloc may fail: return a statuscode
     char *newUrl = (char*)UA_malloc(10 + srvNameLen + 8);
-    sprintf(newUrl, "opc.tcp://%.*s:%d", (int) srvNameLen,
-            r->known.srv.name, r->known.srv.port);
+    #ifndef _MSC_VER
+    snprintf(newUrl, 10 + srvNameLen + 8, "opc.tcp://%.*s:%d/", (int) srvNameLen,
+             r->known.srv.name, r->known.srv.port);
+    #else
+    _snprintf_s(newUrl, 10 + srvNameLen + 8, _TRUNCATE, "opc.tcp://%.*s:%d/", (int) srvNameLen,
+             r->known.srv.name, r->known.srv.port);
+    #endif
+
     UA_LOG_INFO(server->config.logger, UA_LOGCATEGORY_SERVER,
                 "Multicast DNS: found server: %s", newUrl);
     entry->serverOnNetwork.discoveryUrl = UA_String_fromChars(newUrl);
@@ -311,7 +330,7 @@ void mdns_create_txt(UA_Server *server, const char *fullServiceDomain, const cha
         // path does not contain slash, so add it here
         if (path[0] == '/')
             // todo: malloc in strdup may fail: return a statuscode
-            allocPath = STRDUP(path);
+            allocPath = UA_STRDUP(path);
         else {
             // todo: malloc may fail: return a statuscode
             allocPath = (char*)UA_malloc(strlen(path) + 2);
@@ -336,7 +355,7 @@ void mdns_create_txt(UA_Server *server, const char *fullServiceDomain, const cha
         caps = (char*)UA_malloc(sizeof(char) * capsLen);
         size_t idx = 0;
         for (size_t i = 0; i < *capabilitiesSize; i++) {
-            strncpy(caps + idx, (const char *) capabilites[i].data, capabilites[i].length);
+            memcpy(caps + idx, (const char *) capabilites[i].data, capabilites[i].length);
             idx += capabilites[i].length + 1;
             caps[idx - 1] = ',';
         }
@@ -402,6 +421,12 @@ getInterfaces(UA_Server *server) {
     for(size_t attempts = 0; attempts != 3; ++attempts) {
         // todo: malloc may fail: return a statuscode
         adapter_addresses = (IP_ADAPTER_ADDRESSES*)UA_malloc(adapter_addresses_buffer_size);
+        if (!adapter_addresses) {
+            UA_LOG_ERROR(server->config.logger, UA_LOGCATEGORY_SERVER,
+                         "GetAdaptersAddresses out of memory");
+            adapter_addresses = NULL;
+            break;
+        }
         DWORD error = GetAdaptersAddresses(AF_UNSPEC,
                                            GAA_FLAG_SKIP_ANYCAST |
                                            GAA_FLAG_SKIP_DNS_SERVER |
@@ -410,10 +435,6 @@ getInterfaces(UA_Server *server) {
                                            &adapter_addresses_buffer_size);
 
         if(ERROR_SUCCESS == error) {
-            UA_LOG_ERROR(server->config.logger, UA_LOGCATEGORY_SERVER,
-                         "GetAdaptersAddresses returned an error. "
-                         "Not setting mDNS A records.");
-            adapter_addresses = NULL;
             break;
         } else if (ERROR_BUFFER_OVERFLOW == error) {
             // Try again with the new size
@@ -436,9 +457,11 @@ getInterfaces(UA_Server *server) {
 void mdns_set_address_record(UA_Server *server, const char *fullServiceDomain,
                              const char *localDomain) {
     IP_ADAPTER_ADDRESSES* adapter_addresses = getInterfaces(server);
+    if (!adapter_addresses)
+        return;
 
     /* Iterate through all of the adapters */
-    IP_ADAPTER_ADDRESSES* adapter = NULL;
+    IP_ADAPTER_ADDRESSES* adapter = adapter_addresses->Next;
     for(; adapter != NULL; adapter = adapter->Next) {
         /* Skip loopback adapters */
         if(IF_TYPE_SOFTWARE_LOOPBACK == adapter->IfType)

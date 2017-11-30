@@ -42,6 +42,8 @@ endif()
 
 add_example(tutorial_client_firststeps tutorial_client_firststeps.c)
 
+add_example(tutorial_client_events tutorial_client_events.c)
+
 ##################
 # Example Server #
 ##################
@@ -53,6 +55,8 @@ add_example(server server.c)
 ##################
 
 add_example(client client.c)
+
+add_example(client_connect_loop client_connect_loop.c)
 
 ####################
 # Feature Examples #
@@ -66,32 +70,12 @@ add_example(server_repeated_job server_repeated_job.c)
 
 add_example(server_inheritance server_inheritance.c)
 
-if(UA_BUILD_EXAMPLES_NODESET_COMPILER)
-  if(BUILD_SHARED_LIBS)
-    message(FATAL_ERROR "The nodeset compiler currently requires static linking to access internal API")
-  endif()
+add_example(custom_datatype_client custom_datatype/client_types_custom.c)
+add_example(custom_datatype_server custom_datatype/server_types_custom.c)
 
-  # example information model from nodeset xml
-  add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/src_generated/nodeset.h ${PROJECT_BINARY_DIR}/src_generated/nodeset.c
-                    PRE_BUILD
-                    COMMAND ${PYTHON_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/pyUANamespace/generate_open62541CCode.py
-                                                 -i ${PROJECT_SOURCE_DIR}/tools/pyUANamespace/NodeID_Blacklist_FullNS0.txt
-                                                 ${PROJECT_SOURCE_DIR}/tools/schema/namespace0/Opc.Ua.NodeSet2.xml
-                                                 ${PROJECT_SOURCE_DIR}/examples/server_nodeset.xml
-                                                 ${PROJECT_BINARY_DIR}/src_generated/nodeset
-                    DEPENDS ${PROJECT_SOURCE_DIR}/tools/pyUANamespace/generate_open62541CCode.py
-                            ${PROJECT_SOURCE_DIR}/tools/pyUANamespace/open62541_MacroHelper.py
-                            ${PROJECT_SOURCE_DIR}/tools/pyUANamespace/ua_builtin_types.py
-                            ${PROJECT_SOURCE_DIR}/tools/pyUANamespace/ua_constants.py
-                            ${PROJECT_SOURCE_DIR}/tools/pyUANamespace/ua_namespace.py
-                            ${PROJECT_SOURCE_DIR}/tools/pyUANamespace/ua_node_types.py
-                            ${PROJECT_SOURCE_DIR}/tools/pyUANamespace/NodeID_Blacklist_FullNS0.txt
-                            ${PROJECT_SOURCE_DIR}/examples/server_nodeset.xml)
-
-  # needs internal methods which are not exported in the dynamic lib
-  add_example(server_nodeset ${PROJECT_BINARY_DIR}/src_generated/nodeset.c server_nodeset.c)
-  target_include_directories(server_nodeset PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/deps) # needs an internal header
-  set_target_properties(server_nodeset PROPERTIES COMPILE_FLAGS "-Wno-pedantic -Wno-sign-conversion")
+if(UA_ENABLE_NODEMANAGEMENT)
+    add_example(access_control_server access_control/server_access_control.c)
+    add_example(access_control_client access_control/client_access_control.c)
 endif()
 
 if(UA_BUILD_SELFSIGNED_CERTIFICATE)
@@ -115,3 +99,5 @@ if(UA_ENABLE_DISCOVERY)
         add_example(discovery_server_multicast discovery/server_multicast.c)
     endif()
 endif()
+
+add_subdirectory(nodeset)

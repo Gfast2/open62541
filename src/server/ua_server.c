@@ -4,19 +4,9 @@
 
 #include "ua_types.h"
 #include "ua_server_internal.h"
-#include "ua_securechannel_manager.h"
-#include "ua_session_manager.h"
-#include "ua_util.h"
-#include "ua_services.h"
-#include "ua_types_generated.h"
-#include "ua_types_generated_handling.h"
 
 #ifdef UA_ENABLE_GENERATE_NAMESPACE0
 #include "ua_namespaceinit_generated.h"
-#endif
-
-#if defined(UA_ENABLE_MULTITHREADING) && !defined(NDEBUG)
-UA_THREAD_LOCAL bool rcu_locked = false;
 #endif
 
 /**********************/
@@ -58,34 +48,36 @@ UA_UInt16 UA_Server_addNamespace(UA_Server *server, const char* name) {
 UA_StatusCode
 UA_Server_forEachChildNodeCall(UA_Server *server, UA_NodeId parentNodeId,
                                UA_NodeIteratorCallback callback, void *handle) {
-    UA_RCU_LOCK();
-    const UA_Node *parent = UA_NodeStore_get(server->nodestore, &parentNodeId);
-    if(!parent) {
-        UA_RCU_UNLOCK();
+    const UA_Node *parent =
+        server->config.nodestore.getNode(server->config.nodestore.context,
+                                         &parentNodeId);
+    if(!parent)
         return UA_STATUSCODE_BADNODEIDINVALID;
-    }
 
     /* TODO: We need to do an ugly copy of the references array since users may
      * delete references from within the callback. In single-threaded mode this
      * changes the same node we point at here. In multi-threaded mode, this
-     * creates a new copy as nodes are truly immutable. */
-    UA_ReferenceNode *refs = NULL;
-    size_t refssize = parent->referencesSize;
-    UA_StatusCode retval = UA_Array_copy(parent->references, parent->referencesSize,
-        (void**)&refs, &UA_TYPES[UA_TYPES_REFERENCENODE]);
-    if(retval != UA_STATUSCODE_GOOD) {
-        UA_RCU_UNLOCK();
-        return retval;
+     * creates a new copy as nodes are truly immutable.
+     * The callback could remove a node via the regular public API.
+     * This can remove a member of the nodes-array we iterate over...
+     * */
+    UA_Node *parentCopy = UA_Node_copy_alloc(parent);
+    if(!parentCopy) {
+        server->config.nodestore.releaseNode(server->config.nodestore.context, parent);
+        return UA_STATUSCODE_BADUNEXPECTEDERROR;
     }
 
-    for(size_t i = parent->referencesSize; i > 0; --i) {
-        UA_ReferenceNode *ref = &refs[i - 1];
-        retval |= callback(ref->targetId.nodeId, ref->isInverse,
-                           ref->referenceTypeId, handle);
+    UA_StatusCode retval = UA_STATUSCODE_GOOD;
+    for(size_t i = parentCopy->referencesSize; i > 0; --i) {
+        UA_NodeReferenceKind *ref = &parentCopy->references[i - 1];
+        for (size_t j = 0; j<ref->targetIdsSize; j++)
+            retval |= callback(ref->targetIds[j].nodeId, ref->isInverse,
+                               ref->referenceTypeId, handle);
     }
-    UA_RCU_UNLOCK();
+    UA_Node_deleteMembers(parentCopy);
+    UA_free(parentCopy);
 
-    UA_Array_delete(refs, refssize, &UA_TYPES[UA_TYPES_REFERENCENODE]);
+    server->config.nodestore.releaseNode(server->config.nodestore.context, parent);
     return retval;
 }
 
@@ -98,9 +90,6 @@ void UA_Server_delete(UA_Server *server) {
     /* Delete all internal data */
     UA_SecureChannelManager_deleteMembers(&server->secureChannelManager);
     UA_SessionManager_deleteMembers(&server->sessionManager);
-    UA_RCU_LOCK();
-    UA_NodeStore_delete(server->nodestore);
-    UA_RCU_UNLOCK();
     UA_Array_delete(server->namespaces, server->namespacesSize, &UA_TYPES[UA_TYPES_STRING]);
 
 #ifdef UA_ENABLE_DISCOVERY
@@ -110,8 +99,12 @@ void UA_Server_delete(UA_Server *server) {
         UA_RegisteredServer_deleteMembers(&rs->registeredServer);
         UA_free(rs);
     }
-    if(server->periodicServerRegisterCallback)
-        UA_free(server->periodicServerRegisterCallback);
+    periodicServerRegisterCallback_entry *ps, *ps_tmp;
+    LIST_FOREACH_SAFE(ps, &server->periodicServerRegisterCallbacks, pointers, ps_tmp) {
+        LIST_REMOVE(ps, pointers);
+        UA_free(ps->callback);
+        UA_free(ps);
+    }
 
 # ifdef UA_ENABLE_DISCOVERY_MULTICAST
     if(server->config.applicationDescription.applicationType == UA_APPLICATIONTYPE_DISCOVERYSERVER)
@@ -161,13 +154,17 @@ UA_Server_cleanup(UA_Server *server, void *_) {
 #endif
 }
 
+/********************/
+/* Server Lifecycle */
+/********************/
+
 UA_Server *
 UA_Server_new(const UA_ServerConfig *config) {
     UA_Server *server = (UA_Server *)UA_calloc(1, sizeof(UA_Server));
     if(!server)
         return NULL;
 
-    if(config->endpoints.count == 0) {
+    if(config->endpointsSize == 0) {
         UA_LOG_FATAL(config->logger,
                      UA_LOGCATEGORY_SERVER,
                      "There has to be at least one endpoint.");
@@ -176,8 +173,10 @@ UA_Server_new(const UA_ServerConfig *config) {
     }
 
     server->config = *config;
-    server->startTime = UA_DateTime_now();
-    server->nodestore = UA_NodeStore_new();
+
+    /* Init start time to zero, the actual start time will be sampled in
+     * UA_Server_run_startup() */
+    server->startTime = 0;
 
     /* Set a seed for non-cyptographic randomness */
 #ifndef UA_ENABLE_DETERMINISTIC_RNG
@@ -194,7 +193,6 @@ UA_Server_new(const UA_ServerConfig *config) {
 
     /* Initialized the dispatch queue for worker threads */
 #ifdef UA_ENABLE_MULTITHREADING
-    rcu_init();
     cds_wfcq_init(&server->dispatchQueue_head, &server->dispatchQueue_tail);
 #endif
 
@@ -216,7 +214,7 @@ UA_Server_new(const UA_ServerConfig *config) {
 #ifdef UA_ENABLE_DISCOVERY
     LIST_INIT(&server->registeredServers);
     server->registeredServersSize = 0;
-    server->periodicServerRegisterCallback = NULL;
+    LIST_INIT(&server->periodicServerRegisterCallbacks);
     server->registerServerCallback = NULL;
     server->registerServerCallbackData = NULL;
 #endif
@@ -224,7 +222,11 @@ UA_Server_new(const UA_ServerConfig *config) {
     /* Initialize multicast discovery */
 #if defined(UA_ENABLE_DISCOVERY) && defined(UA_ENABLE_DISCOVERY_MULTICAST)
     server->mdnsDaemon = NULL;
-    server->mdnsSocket = 0;
+#ifdef _WIN32
+    server->mdnsSocket = INVALID_SOCKET;
+#else
+    server->mdnsSocket = -1;
+#endif
     server->mdnsMainSrvAdded = UA_FALSE;
     if(server->config.applicationDescription.applicationType == UA_APPLICATIONTYPE_DISCOVERYSERVER)
         initMulticastDiscoveryServer(server);
@@ -240,12 +242,16 @@ UA_Server_new(const UA_ServerConfig *config) {
     server->serverOnNetworkCallbackData = NULL;
 #endif
 
-    /* Initialize Namespace 0 */
-#ifndef UA_ENABLE_GENERATE_NAMESPACE0
-    UA_Server_createNS0(server);
-#else
-    ua_namespaceinit_generated(server);
-#endif
+    /* Initialize namespace 0*/
+    UA_StatusCode retVal = UA_Server_initNS0(server);
+    if (retVal != UA_STATUSCODE_GOOD) {
+        UA_LOG_ERROR(config->logger,
+                     UA_LOGCATEGORY_SERVER,
+                     "Initialization of Namespace 0 failed with %s. See previous outputs for any error messages.",
+                     UA_StatusCode_name(retVal));
+        UA_Server_delete(server);
+        return NULL;
+    }
 
     return server;
 }

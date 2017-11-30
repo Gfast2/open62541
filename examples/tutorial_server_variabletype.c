@@ -31,14 +31,14 @@ addVariableType2DPoint(UA_Server *server) {
     UA_UInt32 arrayDims[1] = {2};
     vtAttr.arrayDimensions = arrayDims;
     vtAttr.arrayDimensionsSize = 1;
-    vtAttr.displayName = UA_LOCALIZEDTEXT("en_US", "2DPoint Type");
+    vtAttr.displayName = UA_LOCALIZEDTEXT("en-US", "2DPoint Type");
 
     /* a matching default value is required */
     UA_Double zero[2] = {0.0, 0.0};
     UA_Variant_setArray(&vtAttr.value, zero, 2, &UA_TYPES[UA_TYPES_DOUBLE]);
 
     UA_Server_addVariableTypeNode(server, UA_NODEID_NULL,
-                                  UA_NODEID_NUMERIC(0, UA_NS0ID_BASEVARIABLETYPE),
+                                  UA_NODEID_NUMERIC(0, UA_NS0ID_BASEDATAVARIABLETYPE),
                                   UA_NODEID_NUMERIC(0, UA_NS0ID_HASSUBTYPE),
                                   UA_QUALIFIEDNAME(1, "2DPoint Type"), UA_NODEID_NULL,
                                   vtAttr, NULL, &pointTypeId);
@@ -61,7 +61,8 @@ addVariable(UA_Server *server) {
     UA_UInt32 arrayDims[1] = {2};
     vAttr.arrayDimensions = arrayDims;
     vAttr.arrayDimensionsSize = 1;
-    vAttr.displayName = UA_LOCALIZEDTEXT("en_US", "2DPoint Variable");
+    vAttr.displayName = UA_LOCALIZEDTEXT("en-US", "2DPoint Variable");
+    vAttr.accessLevel = UA_ACCESSLEVELMASK_READ | UA_ACCESSLEVELMASK_WRITE;
     /* vAttr.value is left empty, the server instantiates with the default value */
 
     /* Add the node */
@@ -84,7 +85,7 @@ addVariableFail(UA_Server *server) {
     UA_VariableAttributes vAttr = UA_VariableAttributes_default;
     vAttr.dataType = UA_TYPES[UA_TYPES_DOUBLE].typeId;
     vAttr.valueRank = -1; /* a scalar. this is not allowed per the variable type */
-    vAttr.displayName = UA_LOCALIZEDTEXT("en_US", "2DPoint Variable (fail)");
+    vAttr.displayName = UA_LOCALIZEDTEXT("en-US", "2DPoint Variable (fail)");
     UA_String s = UA_STRING("2dpoint?");
     UA_Variant_setScalar(&vAttr.value, &s, &UA_TYPES[UA_TYPES_STRING]);
 
@@ -105,7 +106,7 @@ static void
 writeVariable(UA_Server *server) {
     UA_StatusCode retval = UA_Server_writeValueRank(server, pointVariableId, 0);
     UA_LOG_INFO(UA_Log_Stdout, UA_LOGCATEGORY_USERLAND,
-                "Setting the Value Rank failed with Status Code %s\n",
+                "Setting the Value Rank failed with Status Code %s",
                 UA_StatusCode_name(retval));
 
 }

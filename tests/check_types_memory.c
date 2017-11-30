@@ -14,6 +14,20 @@
 #include "ua_util.h"
 #include "check.h"
 
+// Define types to a dummy value if they are not available (e.g. not built with NS0 full)
+#ifndef UA_TYPES_UNION
+#define UA_TYPES_UNION UA_TYPES_COUNT
+#endif
+#ifndef UA_TYPES_HISTORYREADDETAILS
+#define UA_TYPES_HISTORYREADDETAILS UA_TYPES_COUNT
+#endif
+#ifndef UA_TYPES_NOTIFICATIONDATA
+#define UA_TYPES_NOTIFICATIONDATA UA_TYPES_COUNT
+#endif
+#ifndef UA_TYPES_MONITORINGFILTERRESULT
+#define UA_TYPES_MONITORINGFILTERRESULT UA_TYPES_COUNT
+#endif
+
 START_TEST(newAndEmptyObjectShallBeDeleted) {
     // given
     void *obj = UA_new(&UA_TYPES[_i]);
@@ -105,7 +119,14 @@ START_TEST(encodeShallYieldDecode) {
 END_TEST
 
 START_TEST(decodeShallFailWithTruncatedBufferButSurvive) {
-    if (_i == UA_TYPES_DISCOVERYCONFIGURATION)
+    //Skip test for void*
+    if (_i == UA_TYPES_DISCOVERYCONFIGURATION ||
+            _i == UA_TYPES_FILTEROPERAND ||
+            _i == UA_TYPES_MONITORINGFILTER ||
+            _i == UA_TYPES_UNION ||
+            _i == UA_TYPES_HISTORYREADDETAILS ||
+            _i == UA_TYPES_NOTIFICATIONDATA ||
+            _i == UA_TYPES_MONITORINGFILTERRESULT)
         return;
     // given
     UA_ByteString msg1;
@@ -126,7 +147,7 @@ START_TEST(decodeShallFailWithTruncatedBufferButSurvive) {
     // when
     void *obj2 = UA_new(&UA_TYPES[_i]);
     size_t offset = 0;
-    retval = UA_decodeBinary(&msg1, &offset, obj2, &UA_TYPES[_i], 0, NULL); 
+    retval = UA_decodeBinary(&msg1, &offset, obj2, &UA_TYPES[_i], 0, NULL);
     ck_assert_int_ne(retval, UA_STATUSCODE_GOOD);
     UA_delete(obj2, &UA_TYPES[_i]);
     UA_ByteString_deleteMembers(&msg1);
@@ -207,7 +228,13 @@ START_TEST(calcSizeBinaryShallBeCorrect) {
     if(_i == UA_TYPES_VARIANT ||
        _i == UA_TYPES_VARIABLEATTRIBUTES ||
        _i == UA_TYPES_VARIABLETYPEATTRIBUTES ||
-       _i == UA_TYPES_DISCOVERYCONFIGURATION)
+       _i == UA_TYPES_FILTEROPERAND ||
+       _i == UA_TYPES_MONITORINGFILTER ||
+       _i == UA_TYPES_DISCOVERYCONFIGURATION ||
+       _i == UA_TYPES_UNION ||
+       _i == UA_TYPES_HISTORYREADDETAILS ||
+       _i == UA_TYPES_NOTIFICATIONDATA ||
+       _i == UA_TYPES_MONITORINGFILTERRESULT)
         return;
     void *obj = UA_new(&UA_TYPES[_i]);
     size_t predicted_size = UA_calcSizeBinary(obj, &UA_TYPES[_i]);
