@@ -34,12 +34,16 @@
 # define OPTVAL_TYPE int
 # define ERR_CONNECTION_PROGRESS EINPROGRESS
 # include <arpa/inet.h>
-# include <netinet/in.h>
-# include <sys/select.h>
-# include <sys/ioctl.h>
+// # include <netinet/in.h>
+// # include <sys/select.h>
+// # include <sys/ioctl.h>
 # include <fcntl.h>
 # include <unistd.h> // read, write, close
 # include <netdb.h>
+
+# include <sys/socket.h> // => wrapper for <lwip/sockets.h>
+# include <tcpip_adapter.h> // esp32 specific
+
 # ifdef __QNX__
 #  include <sys/socket.h>
 # endif
@@ -382,6 +386,7 @@ ServerNetworkLayerTCP_start(UA_ServerNetworkLayer *nl) {
     ServerNetworkLayerTCP *layer = (ServerNetworkLayerTCP *)nl->handle;
 
     /* Get the discovery url from the hostname */
+//TODO: Replace hostname with ip address of esp32
     UA_String du = UA_STRING_NULL;
     char hostname[256];
     if(gethostname(hostname, 255) == 0) {
