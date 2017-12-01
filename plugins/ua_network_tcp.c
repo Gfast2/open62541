@@ -60,7 +60,7 @@
 // # include <sys/ioctl.h>
 
 # ifndef _WRS_KERNEL
-#  include <sys/select.h>
+// #  include <sys/select.h>
 # else
 #  include <hostLib.h>
 #  include <selectLib.h>

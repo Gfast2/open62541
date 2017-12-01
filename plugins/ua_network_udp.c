@@ -14,7 +14,7 @@
 # include <fcntl.h> // fcntl
 # include <strings.h> //bzero
 # ifndef _WRS_KERNEL
-#  include <sys/select.h>
+// #  include <sys/select.h>
 # else
 # include <selectLib.h>
 # endif

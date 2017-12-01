@@ -75,11 +75,21 @@ UA_DateTime UA_DateTime_nowMonotonic(void) {
     return (mts.tv_sec * UA_SEC_TO_DATETIME) + (mts.tv_nsec / 100);
 #elif !defined(CLOCK_MONOTONIC_RAW)
     struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
+    // clock_gettime(CLOCK_MONOTONIC, &ts);
+    struct timeval tv;
+    gettimeofday(&tv, NULL); // TODO: do we need the specify the timezone?
+    ts.tv_sec = tv.tv_sec;
+    ts.tv_nsec = tv.tv_usec * 1000;
+
     return (ts.tv_sec * UA_SEC_TO_DATETIME) + (ts.tv_nsec / 100);
 #else
     struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+    // clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+    struct timeval tv;
+    gettimeofday(&tv, NULL); // TODO: do we need the specify the timezone?
+    ts.tv_sec = tv.tv_sec;
+    ts.tv_nsec = tv.tv_usec * 1000;
+
     return (ts.tv_sec * UA_SEC_TO_DATETIME) + (ts.tv_nsec / 100);
 #endif
 }
