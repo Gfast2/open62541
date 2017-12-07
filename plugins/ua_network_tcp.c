@@ -52,7 +52,7 @@
 # define WIN32_INT
 # define OPTVAL_TYPE int
 # define ERR_CONNECTION_PROGRESS EINPROGRESS
-# include <arpa/inet.h>
+// # include <arpa/inet.h>
 
 // # include <netinet/in.h>
 // # include <sys/select.h>
@@ -323,10 +323,17 @@ ServerNetworkLayerTCP_add(ServerNetworkLayerTCP *layer, UA_Int32 newsockfd,
 
     /* Get the peer name for logging */
     char remote_name[100];
+    /*
     int res = getnameinfo((struct sockaddr*)remote,
                           sizeof(struct sockaddr_storage),
                           remote_name, sizeof(remote_name),
-                          NULL, 0, NI_NUMERICHOST);
+                          NULL, 0, NI_NUMERICHOST);*/
+
+    // It's used for "Peer Name Resolution Protocol"
+    // So for this purpose I'd fake my "Inter90" (windows PC) name first.
+    int res = 0;
+    sprintf(remote_name, "Inter90");
+
     if(res == 0) {
         UA_LOG_INFO(UA_Log_Stdout, UA_LOGCATEGORY_NETWORK,
                     "Connection %i | New connection over TCP from %s",
@@ -460,16 +467,26 @@ ServerNetworkLayerTCP_start(UA_ServerNetworkLayer *nl, const UA_String *customHo
         du.data = (UA_Byte*)discoveryUrl;
     }else{    
         char hostname[256];
-        if(gethostname(hostname, 255) == 0) {
+        //if(gethostname(hostname, 255) == 0) {
+    if(tcpip_adapter_get_hostname(TCPIP_ADAPTER_IF_STA, ((const char **)(hostname)) ) == 0) { // for the wifi station interface
+
             char discoveryUrl[256];
-#ifndef _MSC_VER
-            du.length = (size_t)snprintf(discoveryUrl, 255, "opc.tcp://%s:%d/",
-                                         hostname, layer->port);
-#else
-            du.length = (size_t)_snprintf_s(discoveryUrl, 255, _TRUNCATE,
-                                            "opc.tcp://%s:%d/", hostname,
-                                            layer->port);
-#endif
+//#ifndef _MSC_VER
+//            du.length = (size_t)snprintf(discoveryUrl, 255, "opc.tcp://%s:%d/",
+//                                         hostname, layer->port);
+//#else
+//            du.length = (size_t)_snprintf_s(discoveryUrl, 255, _TRUNCATE,
+//                                            "opc.tcp://%s:%d/", hostname,
+//                                            layer->port);
+//#endif
+
+
+            static tcpip_adapter_ip_info_t ip;
+            memset(&ip, 0, sizeof(tcpip_adapter_ip_info_t));
+            tcpip_adapter_get_ip_info(ESP_IF_WIFI_STA, &ip);
+
+            du.length = (size_t)snprintf(discoveryUrl, 255, "opc.tcp://"IPSTR":%d",IP2STR(&ip.ip),layer->port);
+
             du.data = (UA_Byte*)discoveryUrl;
         }
     }
@@ -758,7 +775,7 @@ UA_ClientConnectionTCP(UA_ConnectionConfig conf,
     if(error != 0 || !server) {
         UA_LOG_WARNING(UA_Log_Stdout, UA_LOGCATEGORY_NETWORK,
                        "DNS lookup of %s failed with error %s",
-                       hostname, gai_strerror(error));
+                       hostname, /*gai_strerror(error)*/error);
         return connection;
     }
 
