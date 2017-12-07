@@ -774,7 +774,7 @@ UA_ClientConnectionTCP(UA_ConnectionConfig conf,
     int error = getaddrinfo(hostname, portStr, &hints, &server);
     if(error != 0 || !server) {
         UA_LOG_WARNING(UA_Log_Stdout, UA_LOGCATEGORY_NETWORK,
-                       "DNS lookup of %s failed with error %s",
+                       "DNS lookup of %s failed with error %d",
                        hostname, /*gai_strerror(error)*/error);
         return connection;
     }
