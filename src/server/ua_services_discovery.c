@@ -405,11 +405,14 @@ process_RegisterServer(UA_Server *server, UA_Session *session,
         }
         memcpy(filePath, requestServer->semaphoreFilePath.data, requestServer->semaphoreFilePath.length );
         filePath[requestServer->semaphoreFilePath.length] = '\0';
+	// Temporaryly comment out for porting job.
+	// Should checkout how to use other avaialble functions as workaround.
+	/*
         if(access( filePath, 0 ) == -1) {
             responseHeader->serviceResult = UA_STATUSCODE_BADSEMPAHOREFILEMISSING;
             UA_free(filePath);
             return;
-        }
+        }*/
         UA_free(filePath);
 #else
         UA_LOG_WARNING(server->config.logger, UA_LOGCATEGORY_CLIENT,
@@ -542,7 +545,10 @@ void UA_Discovery_cleanupTimedOut(UA_Server *server, UA_DateTime nowMonotonic) {
                 if(fp)
                     fclose(fp);
 #else
-                semaphoreDeleted = access( filePath, 0 ) == -1;
+		// access() on success 0 is returned, on error -1 is returned
+		// In order to try the porting job, here I fake it all succeed
+                // semaphoreDeleted = access( filePath, 0 ) == -1;
+                semaphoreDeleted = 0;
 #endif
                 UA_free(filePath);
             } else {
