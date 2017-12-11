@@ -23,18 +23,18 @@ extern "C" {
  * with ``UA_ENABLE_MULTITHREADING`` disabled. Otherwise, if multiple clients
  * run in separate threads, race conditions may occur via global variables in
  * the encoding layer. */
-#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
-# define UA_THREAD_LOCAL _Thread_local /* C11 */
-#elif defined(__cplusplus) && __cplusplus > 199711L
-# define UA_THREAD_LOCAL thread_local /* C++11 */
-#elif defined(__GNUC__) && !defined(_WRS_KERNEL) //defining __thread gave error of missing __tls_lookup in VxWorks
-# define UA_THREAD_LOCAL __thread /* GNU extension */
-#elif defined(_MSC_VER)
-# define UA_THREAD_LOCAL __declspec(thread) /* MSVC extension */
-#else
-# warning The compiler does not support thread-local variables
+//#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+//# define UA_THREAD_LOCAL _Thread_local /* C11 */
+//#elif defined(__cplusplus) && __cplusplus > 199711L
+//# define UA_THREAD_LOCAL thread_local /* C++11 */
+//#elif defined(__GNUC__) && !defined(_WRS_KERNEL) //defining __thread gave error of missing __tls_lookup in VxWorks
+//# define UA_THREAD_LOCAL __thread /* GNU extension */
+//#elif defined(_MSC_VER)
+//# define UA_THREAD_LOCAL __declspec(thread) /* MSVC extension */
+//#else
+//# warning The compiler does not support thread-local variables
 # define UA_THREAD_LOCAL
-#endif
+//#endif
 
 /* Integer Shortnames
  * ------------------

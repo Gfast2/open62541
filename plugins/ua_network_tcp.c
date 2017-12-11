@@ -332,7 +332,7 @@ ServerNetworkLayerTCP_add(ServerNetworkLayerTCP *layer, UA_Int32 newsockfd,
     // It's used for "Peer Name Resolution Protocol"
     // So for this purpose I'd fake my "Inter90" (windows PC) name first.
     int res = 0;
-    sprintf(remote_name, "Inter90");
+    sprintf(remote_name, "192.168.178.107");
 
     if(res == 0) {
         UA_LOG_INFO(UA_Log_Stdout, UA_LOGCATEGORY_NETWORK,
